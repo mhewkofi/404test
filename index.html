@@ -390,7 +390,7 @@
         const OVERLAY_FADE_MS = 240;
 
         const CONFIG = {
-          homeUrl: "/",
+          homeUrl: "https://ko-fi.com/",
           maxHealth: 3,
           gravity: 2500,
           jumpForce: -860,
@@ -836,6 +836,18 @@
         }
 
         function returnHome() {
+          // When the game is embedded in an iframe (e.g. Webflow), navigating
+          // window.location only changes the iframe; we want the whole tab to
+          // go to ko-fi.com. Cross-origin top navigation is allowed because
+          // it's initiated by a user gesture (click/tap).
+          try {
+            if (window.top && window.top !== window.self) {
+              window.top.location.href = CONFIG.homeUrl;
+              return;
+            }
+          } catch (err) {
+            /* Cross-origin frame access denied — fall through to the iframe nav. */
+          }
           window.location.href = CONFIG.homeUrl;
         }
 
