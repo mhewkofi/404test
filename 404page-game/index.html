@@ -1,0 +1,1593 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>404 Ko-fi Runner</title>
+    <style>
+      @font-face {
+        font-family: "DM Sans";
+        src: url("assets/fonts/DMSans-VariableFont.ttf") format("truetype-variations");
+        font-weight: 100 1000;
+        font-style: normal;
+        font-display: swap;
+      }
+      @font-face {
+        font-family: "DM Sans";
+        src: url("assets/fonts/DMSans-Italic-VariableFont.ttf") format("truetype-variations");
+        font-weight: 100 1000;
+        font-style: italic;
+        font-display: swap;
+      }
+
+      :root {
+        color-scheme: light;
+        font-family:
+          "DM Sans", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
+          "Segoe UI", sans-serif;
+        background: #f4efe8;
+        color: #202020;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      /* Lock html + body to the viewport so nothing pads the canvas away from
+         the bottom edge — without this the floor can sit a few pixels above
+         the bottom on some browsers. */
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+        height: 100%;
+        background: #f4efe8;
+      }
+
+      body {
+        overflow: hidden;
+      }
+
+      .kofi-404-runner {
+        width: 100%;
+        height: 100%;
+        /* dvh hugs the viewport on mobile when the browser chrome shows/hides. */
+        height: 100dvh;
+        color: #202020;
+      }
+
+      .kofi-game-shell {
+        position: relative;
+        overflow: hidden;
+        background: #f4efe8;
+        width: 100%;
+        height: 100%;
+      }
+
+      .kofi-game-canvas {
+        display: block;
+        width: 100%;
+        height: 100%;
+        touch-action: none;
+      }
+
+      .kofi-game-hud {
+        position: absolute;
+        inset: 18px 20px auto 20px;
+        z-index: 5;
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 16px;
+        pointer-events: none;
+      }
+
+      .kofi-label {
+        margin: 0 0 4px;
+        color: rgba(32, 32, 32, 0.6);
+        font-size: 0.72rem;
+        font-weight: 800;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      .kofi-score {
+        margin: 0;
+        font-size: clamp(1.44rem, 3.2vw, 2.4rem);
+        font-weight: 400;
+        line-height: 1;
+        font-variant-numeric: tabular-nums;
+      }
+
+      .kofi-health {
+        display: flex;
+        justify-content: flex-end;
+        gap: 7px;
+      }
+
+      .kofi-cup {
+        width: 34px;
+        height: 28px;
+        display: inline-block;
+        background: center / contain no-repeat var(--cup-url);
+        opacity: 0.25;
+        transform-origin: center bottom;
+      }
+
+      .kofi-cup.is-full {
+        opacity: 1;
+      }
+
+      .kofi-overlay {
+        position: absolute;
+        inset: 0;
+        z-index: 4;
+        display: grid;
+        place-items: center;
+        padding: 24px;
+        background: rgba(244, 239, 232, 0.86);
+        opacity: 1;
+        transition:
+          opacity 220ms ease,
+          visibility 220ms ease;
+      }
+
+      .kofi-overlay.is-hidden {
+        visibility: hidden;
+        opacity: 0;
+        pointer-events: none;
+      }
+
+      .kofi-overlay.is-gameover {
+        inset: 50% auto auto 50%;
+        width: min(360px, calc(100% - 32px));
+        transform: translate(-50%, -50%);
+        padding: 0;
+        background: transparent;
+      }
+
+      .kofi-panel {
+        width: min(520px, 100%);
+        display: grid;
+        gap: 18px;
+        justify-items: center;
+        padding: clamp(24px, 6vw, 42px);
+        border: 1px solid rgba(32, 32, 32, 0.14);
+        border-radius: 18px;
+        background: #f9f7f4;
+        text-align: center;
+      }
+
+      .kofi-overlay.is-gameover .kofi-panel {
+        width: 100%;
+        gap: 14px;
+        padding: 22px;
+      }
+
+      .kofi-overlay.is-gameover h1 {
+        display: none;
+      }
+
+      /* Win state — shown when score reaches 10,000. Reuses the gameover layout
+         but keeps the title visible (and themed) for the congrats message. */
+      .kofi-overlay.is-won {
+        inset: 50% auto auto 50%;
+        width: min(420px, calc(100% - 32px));
+        transform: translate(-50%, -50%);
+        padding: 0;
+        background: transparent;
+      }
+
+      .kofi-overlay.is-won .kofi-panel {
+        width: 100%;
+        gap: 10px;
+        padding: 22px;
+      }
+
+      .kofi-overlay.is-won h1 {
+        font-size: clamp(1.9rem, 6vw, 2.8rem);
+        font-style: italic;
+        color: #C09BFF;
+        line-height: 1;
+      }
+
+      .kofi-overlay.is-won p {
+        color: #202020;
+        font-size: 1.1rem;
+        font-weight: 800;
+      }
+
+      .kofi-panel h1 {
+        margin: 0;
+        font-size: clamp(2.4rem, 8vw, 5.3rem);
+        line-height: 0.9;
+        letter-spacing: 0;
+      }
+
+      .kofi-panel p {
+        margin: 0;
+        color: rgba(32, 32, 32, 0.72);
+        font-size: clamp(1rem, 2.5vw, 1.28rem);
+        line-height: 1.45;
+      }
+
+      .kofi-overlay.is-gameover p {
+        color: #202020;
+        font-size: 1.28rem;
+        font-weight: 950;
+      }
+
+      .kofi-actions {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: center;
+        gap: 10px;
+      }
+
+      .kofi-button {
+        min-height: 46px;
+        min-width: 148px;
+        border: 1px solid #202020;
+        border-radius: 999px;
+        padding: 11px 18px;
+        color: #202020;
+        background: #ffffff;
+        font: inherit;
+        font-weight: 900;
+        cursor: pointer;
+      }
+
+      .kofi-button.is-primary {
+        background: #C09BFF;
+        color: #202020;
+        border-color: #C09BFF;
+      }
+
+      .kofi-button:hover,
+      .kofi-button:focus-visible {
+        outline: none;
+        transform: translateY(-1px);
+      }
+
+      /* Scene title (404 + Page Not Found + Return Home) is now drawn on the
+         canvas in JS so the character and ko-fi cups render IN FRONT of it.
+         See drawSceneTitle() below for the canvas-rendered equivalent. */
+
+      /* Sound on/off toggle — anchored bottom-right of the game shell. Sits
+         above the canvas (z-index 6) so it's clickable over scene art. */
+      .kofi-sound-toggle {
+        position: absolute;
+        right: 18px;
+        bottom: 18px;
+        z-index: 6;
+        width: 42px;
+        height: 42px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border: 1px solid rgba(32, 32, 32, 0.18);
+        border-radius: 999px;
+        background: #ffffff;
+        color: #202020;
+        cursor: pointer;
+        padding: 0;
+        box-shadow: 0 4px 14px rgba(32, 32, 32, 0.08);
+        transition:
+          transform 140ms ease,
+          background 140ms ease,
+          color 140ms ease,
+          box-shadow 140ms ease;
+      }
+
+      .kofi-sound-toggle:hover,
+      .kofi-sound-toggle:focus-visible {
+        outline: none;
+        transform: translateY(-1px);
+        box-shadow: 0 6px 18px rgba(32, 32, 32, 0.12);
+      }
+
+      .kofi-sound-toggle.is-muted {
+        background: #f4efe8;
+        color: rgba(32, 32, 32, 0.55);
+      }
+
+      @media (max-width: 640px) {
+        .kofi-game-hud {
+          inset: 14px 14px auto 14px;
+        }
+
+        .kofi-cup {
+          width: 29px;
+          height: 24px;
+        }
+
+        .kofi-sound-toggle {
+          right: 14px;
+          bottom: 14px;
+          width: 38px;
+          height: 38px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <!-- Paste everything inside this wrapper into a Webflow Embed component. -->
+    <div
+      id="kofi404Runner"
+      class="kofi-404-runner w-full max-w-6xl mx-auto"
+      style="--cup-url: url('assets/collectibles/kofi-cup.png')"
+    >
+      <div class="kofi-game-shell">
+        <canvas class="kofi-game-canvas" aria-label="Ko-fi 404 endless runner"></canvas>
+
+        <!-- 404, Page Not Found, and Return Home are drawn on the canvas (see
+             drawSceneTitle in JS) so the character + ko-fi cups appear in front. -->
+
+        <div class="kofi-game-hud" aria-hidden="true">
+          <div>
+            <p class="kofi-label">Score</p>
+            <p class="kofi-score" data-score>0000</p>
+          </div>
+          <div>
+            <p class="kofi-label">Coffee Power</p>
+            <div class="kofi-health" data-health></div>
+          </div>
+        </div>
+
+        <!-- Sound on/off toggle, anchored to the bottom-right corner. -->
+        <button
+          class="kofi-sound-toggle"
+          type="button"
+          data-sound-toggle
+          aria-label="Toggle sound"
+          aria-pressed="true"
+          title="Sound on"
+        ></button>
+
+        <!-- Only shown on Game Over. -->
+        <div class="kofi-overlay is-hidden" data-overlay>
+          <div class="kofi-panel">
+            <h1 data-title>404 — Page Not Found</h1>
+            <p data-message>The page is missing. What do you do?</p>
+            <div class="kofi-actions">
+              <button class="kofi-button" type="button" data-home>Return Home</button>
+              <button class="kofi-button is-primary" type="button" data-start>
+                Try Again
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      (() => {
+        "use strict";
+
+        const root = document.querySelector("#kofi404Runner");
+        const canvas = root.querySelector("canvas");
+        const ctx = canvas.getContext("2d");
+        const scoreEl = root.querySelector("[data-score]");
+        const healthEl = root.querySelector("[data-health]");
+        const overlay = root.querySelector("[data-overlay]");
+        const titleEl = root.querySelector("[data-title]");
+        const messageEl = root.querySelector("[data-message]");
+        const startButton = root.querySelector("[data-start]");
+        const homeButton = root.querySelector("[data-home]");
+        const soundToggleEl = root.querySelector("[data-sound-toggle]");
+        // The Return Home pill is now drawn on canvas. These pieces of state drive
+        // the canvas pill: visibility (fade on game over), faded state (auto-dim
+        // after a few seconds), hover state, and hit-test bounds.
+        let homePillFadeTimer = null;
+        const HOME_PILL_FADE_DELAY_MS = 6000;
+        // Used to defer clearing the game-over / win classes (and the title text
+        // used by the win panel) until after the overlay's CSS opacity fade
+        // completes. Without this, a quick frame of the old result panel or the
+        // full-screen "404 — Page Not Found" title flashes during Try Again.
+        let overlayFadeTimer = null;
+        // Matches the .kofi-overlay opacity/visibility transition duration (220ms)
+        // plus a small buffer.
+        const OVERLAY_FADE_MS = 240;
+
+        const CONFIG = {
+          homeUrl: "/",
+          maxHealth: 3,
+          gravity: 2500,
+          jumpForce: -860,
+          startSpeed: 240,
+          maxSpeed: 430,
+          floorColor: "#F9F7F4",
+          skyColor: "#F4EFE8",
+        };
+
+        // Asset placeholders: replace these paths with Webflow asset URLs after upload.
+        const ASSETS = {
+          characterSprites: Array.from(
+            { length: 24 },
+            (_, i) =>
+              // encodeURI handles the spaces in the filename ("character 1 -2_...")
+              encodeURI(
+                `assets/character-explore/character 1 -2_${String(i + 11).padStart(5, "0")}.png`,
+              ),
+          ),
+          backgrounds: {
+            cloud1: "assets/custom-bg/cloud1.png",
+            cloud2: "assets/custom-bg/cloud2.png",
+            cloudA: "assets/custom-bg/cloudA.png",
+            cloudB: "assets/custom-bg/cloudB.png",
+            star: "assets/custom-bg/star.png",
+            rock: "assets/custom-bg/rock.png",
+            background1: "assets/custom-bg/background_1.png",
+            background2: "assets/custom-bg/background_2.png",
+            background3: "assets/custom-bg/background_3.png",
+            floor: "assets/custom-bg/floor.png",
+          },
+          obstacles: Array.from(
+            { length: 14 },
+            // encodeURI handles the space in the filename ("Asset NN@2x.png")
+            (_, i) => encodeURI(`assets/obstacles/Asset ${i + 63}@2x.png`),
+          ),
+          collectible: "assets/collectibles/kofi-cup.png",
+          // Audio assets — keys match playSound() call sites in the gameplay code.
+          // coffee  -> ko-fi cup collectible pickup
+          // hit     -> obstacle collision
+          // gameOver-> health hits zero (game over panel)
+          // win     -> score reaches WIN_SCORE (congrats panel)
+          // music   -> looping background music
+          sounds: {
+            coffee: "assets/sound/coffee.mp3",
+            hit: "assets/sound/hit.mp3",
+            gameOver: "assets/sound/game-over.mp3",
+            win: "assets/sound/win.mp3",
+            music: "assets/sound/music-loops.mp3",
+          },
+        };
+
+        const images = {
+          character: loadImages(ASSETS.characterSprites),
+          obstacles: loadImages(ASSETS.obstacles),
+          collectible: loadImage(ASSETS.collectible),
+          backgrounds: Object.fromEntries(
+            Object.entries(ASSETS.backgrounds).map(([key, src]) => [key, loadImage(src)]),
+          ),
+        };
+
+        // Volume is dimmed ~10% from the browser default. Music sits lower so it
+        // doesn't fight the SFX. Update SFX_VOLUME / MUSIC_VOLUME to retune.
+        const SFX_VOLUME = 0.9;
+        const MUSIC_VOLUME = 0.4;
+
+        const sounds = Object.fromEntries(
+          Object.entries(ASSETS.sounds).map(([key, src]) => {
+            if (!src) return [key, null];
+            const audio = new Audio(src);
+            audio.preload = "auto";
+            if (key === "music") {
+              audio.loop = true;
+              audio.volume = MUSIC_VOLUME;
+            } else {
+              audio.volume = SFX_VOLUME;
+            }
+            return [key, audio];
+          }),
+        );
+
+        // Sound on/off preference. Persisted across reloads so the user's
+        // choice sticks; falls back to "on" when storage is unavailable.
+        let soundEnabled = (() => {
+          try {
+            return localStorage.getItem("kofi404_sound") !== "off";
+          } catch (err) {
+            return true;
+          }
+        })();
+
+        const state = {
+          mode: "start",
+          width: 960,
+          height: 540,
+          dpr: 1,
+          floorY: 420,
+          lastTime: 0,
+          score: 0,
+          distance: 0,
+          health: CONFIG.maxHealth,
+          speed: CONFIG.startSpeed,
+          obstacleTimer: 1.2,
+          collectibleTimer: 3.8,
+          animTime: 0,
+          invulnerable: 0,
+          obstacles: [],
+          collectibles: [],
+          particles: [],
+          rings: [],
+          shake: 0,
+          // Canvas scene-title state
+          titleVisibility: 1, // 1 = visible, 0 = hidden; tweens on game over / win
+          pillFaded: false,
+          pillHover: false,
+          pillBounds: null, // { x, y, w, h } — populated each frame in drawSceneTitle
+          // Win state
+          fireworkTimer: 0, // counts down between firework bursts when mode === "won"
+        };
+
+        const WIN_SCORE = 10000;
+
+        const player = {
+          x: 92,
+          y: 0,
+          width: 122,
+          height: 146,
+          groundInset: 16,
+          vy: 0,
+          grounded: true,
+        };
+
+        // Object pools keep allocations low during long endless runs.
+        const obstaclePool = [];
+        const collectiblePool = [];
+        const particlePool = [];
+
+        // Obstacle "bag": every refill is a fresh Fisher–Yates shuffle of the
+        // full 14-item set, and we draw without replacement until empty. This
+        // guarantees the player sees every obstacle once per cycle (no two of
+        // the same can land within the same 14-spawn window). On refill we
+        // also re-pick the head if it would repeat the previous bag's tail so
+        // there are no back-to-back duplicates across bag boundaries either.
+        let obstacleBag = [];
+        let lastObstacleImage = null;
+
+        function refillObstacleBag() {
+          obstacleBag = images.obstacles.slice();
+          for (let i = obstacleBag.length - 1; i > 0; i -= 1) {
+            const j = Math.floor(Math.random() * (i + 1));
+            const tmp = obstacleBag[i];
+            obstacleBag[i] = obstacleBag[j];
+            obstacleBag[j] = tmp;
+          }
+          // We pop from the END of the array, so the LAST item is the next
+          // one drawn. If it matches the previous bag's tail, swap it with a
+          // random earlier slot to avoid an immediate repeat.
+          if (
+            lastObstacleImage &&
+            obstacleBag.length > 1 &&
+            obstacleBag[obstacleBag.length - 1] === lastObstacleImage
+          ) {
+            const swapIdx = Math.floor(Math.random() * (obstacleBag.length - 1));
+            const last = obstacleBag.length - 1;
+            const tmp = obstacleBag[last];
+            obstacleBag[last] = obstacleBag[swapIdx];
+            obstacleBag[swapIdx] = tmp;
+          }
+        }
+
+        function pickObstacleImage() {
+          if (!obstacleBag.length) refillObstacleBag();
+          const image = obstacleBag.pop();
+          lastObstacleImage = image;
+          return image;
+        }
+
+        function loadImage(src) {
+          const image = new Image();
+          image.src = src;
+          image.onload = draw;
+          return image;
+        }
+
+        function loadImages(paths) {
+          return paths.map(loadImage);
+        }
+
+        // Plays a one-shot SFX. Music is restarted from current position so the
+        // loop isn't yanked back to 0 if play() is called repeatedly.
+        function playSound(name) {
+          if (!soundEnabled) return;
+          const sound = sounds[name];
+          if (!sound) return;
+          try {
+            if (name !== "music") sound.currentTime = 0;
+            sound.play().catch(() => {});
+          } catch (err) {
+            /* swallow — autoplay restrictions are handled by ensureMusic() */
+          }
+        }
+
+        function stopSound(name) {
+          const sound = sounds[name];
+          if (!sound) return;
+          sound.pause();
+          if (name !== "music") sound.currentTime = 0;
+        }
+
+        // Browsers block audio until a user interaction. We call this from every
+        // user-driven input (jump / tap / key) so background music kicks in as
+        // soon as the player engages.
+        function ensureMusic() {
+          if (!soundEnabled) return;
+          const music = sounds.music;
+          if (!music) return;
+          if (music.paused && state.mode === "playing") {
+            music.play().catch(() => {});
+          }
+        }
+
+        function setSoundEnabled(enabled) {
+          soundEnabled = enabled;
+          try {
+            localStorage.setItem("kofi404_sound", enabled ? "on" : "off");
+          } catch (err) {
+            /* storage unavailable — preference just won't persist */
+          }
+          if (!enabled) {
+            Object.values(sounds).forEach((sound) => {
+              if (sound) sound.pause();
+            });
+          } else {
+            ensureMusic();
+          }
+          updateSoundButton();
+        }
+
+        // Inline SVG icons keep the toggle self-contained (no extra asset fetch).
+        const SOUND_ON_SVG =
+          '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+          '<path d="M11 5 6 9H2v6h4l5 4z"/>' +
+          '<path d="M15.5 8.5a5 5 0 0 1 0 7"/>' +
+          '<path d="M18.5 5.5a9 9 0 0 1 0 13"/>' +
+          "</svg>";
+        const SOUND_OFF_SVG =
+          '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+          '<path d="M11 5 6 9H2v6h4l5 4z"/>' +
+          '<line x1="22" y1="9" x2="16" y2="15"/>' +
+          '<line x1="16" y1="9" x2="22" y2="15"/>' +
+          "</svg>";
+
+        function updateSoundButton() {
+          if (!soundToggleEl) return;
+          soundToggleEl.setAttribute("aria-pressed", soundEnabled ? "true" : "false");
+          soundToggleEl.setAttribute(
+            "aria-label",
+            soundEnabled ? "Sound on (click to mute)" : "Sound off (click to unmute)",
+          );
+          soundToggleEl.title = soundEnabled ? "Sound on" : "Sound off";
+          soundToggleEl.classList.toggle("is-muted", !soundEnabled);
+          soundToggleEl.innerHTML = soundEnabled ? SOUND_ON_SVG : SOUND_OFF_SVG;
+        }
+
+        function resize() {
+          const rect = canvas.getBoundingClientRect();
+          state.dpr = Math.min(window.devicePixelRatio || 1, 2);
+          state.width = Math.max(320, rect.width);
+          state.height = Math.max(360, rect.height);
+          canvas.width = Math.round(state.width * state.dpr);
+          canvas.height = Math.round(state.height * state.dpr);
+          ctx.setTransform(state.dpr, 0, 0, state.dpr, 0, 0);
+          state.floorY = state.height * 0.78;
+          // Character is 15% bigger on desktop; mobile uses the base sprite height.
+          // Width follows the sprite's natural aspect ratio (no squashing).
+          const isMobile = state.width < 640;
+          player.height = isMobile ? 146 : 168;
+          const firstFrame = images.character[0];
+          if (firstFrame && firstFrame.complete && firstFrame.naturalWidth > 0) {
+            player.width =
+              player.height * (firstFrame.naturalWidth / firstFrame.naturalHeight);
+          } else {
+            player.width = player.height * (122 / 146); // fallback before load
+          }
+          player.y = Math.min(
+            player.y || playerFloorY(),
+            playerFloorY(),
+          );
+          draw();
+        }
+
+        function resetGame() {
+          state.mode = "playing";
+          state.score = 0;
+          state.distance = 0;
+          state.health = CONFIG.maxHealth;
+          state.speed = CONFIG.startSpeed;
+          state.obstacleTimer = 1.1;
+          state.collectibleTimer = 2.4;
+          state.animTime = 0;
+          state.invulnerable = 0;
+          state.obstacles.forEach((item) => releaseObject(item, obstaclePool));
+          state.collectibles.forEach((item) => releaseObject(item, collectiblePool));
+          state.particles.forEach((item) => releaseObject(item, particlePool));
+          state.obstacles = [];
+          state.collectibles = [];
+          state.particles = [];
+          state.rings = [];
+          state.shake = 0;
+          // Drain the obstacle bag so each new run starts with a fresh shuffle.
+          obstacleBag = [];
+          lastObstacleImage = null;
+          player.y = playerFloorY();
+          player.vy = 0;
+          player.grounded = true;
+          // Begin the fade by hiding the overlay first. The "is-gameover" /
+          // "is-won" classes (and the title text used by the win panel) stay
+          // put until after the 220ms CSS opacity transition completes, so we
+          // never see a one-frame flash of the full-screen "404 — Page Not
+          // Found" title during the Try Again / Play Again transition.
+          overlay.classList.add("is-hidden");
+          if (overlayFadeTimer) clearTimeout(overlayFadeTimer);
+          overlayFadeTimer = setTimeout(() => {
+            overlayFadeTimer = null;
+            // Bail out if the player has already lost / won again in the meantime.
+            if (!overlay.classList.contains("is-hidden")) return;
+            overlay.classList.remove("is-gameover");
+            overlay.classList.remove("is-won");
+            titleEl.textContent = "404 — Page Not Found";
+          }, OVERLAY_FADE_MS);
+          state.fireworkTimer = 0;
+          // Scene title (drawn on canvas) is fully visible at the start of each run;
+          // the pill is at full opacity then auto-fades after a few seconds.
+          state.pillFaded = false;
+          state.pillHover = false;
+          if (homePillFadeTimer) clearTimeout(homePillFadeTimer);
+          homePillFadeTimer = setTimeout(() => {
+            state.pillFaded = true;
+          }, HOME_PILL_FADE_DELAY_MS);
+          updateUI();
+          // Restart the loop from the top for each new run.
+          if (sounds.music) {
+            sounds.music.currentTime = 0;
+          }
+          ensureMusic();
+        }
+
+        function showStart() {
+          state.mode = "start";
+          state.distance = 0;
+          titleEl.textContent = "404 — Page Not Found";
+          messageEl.textContent = "The page is missing. What do you do?";
+          startButton.textContent = "Press Space / Tap To Explore";
+          overlay.classList.remove("is-gameover");
+          overlay.classList.remove("is-hidden");
+          updateUI();
+          draw();
+        }
+
+        function showGameOver() {
+          state.mode = "gameover";
+          // Cancel any pending deferred-reset from a previous Try Again so it
+          // can't clobber the freshly-applied game-over state.
+          if (overlayFadeTimer) {
+            clearTimeout(overlayFadeTimer);
+            overlayFadeTimer = null;
+          }
+          messageEl.textContent = `Score ${Math.floor(state.score).toString().padStart(4, "0")}`;
+          startButton.textContent = "Try Again";
+          overlay.classList.add("is-gameover");
+          overlay.classList.remove("is-hidden");
+          // Canvas scene-title fades out via state.titleVisibility (tweened in update()).
+          if (homePillFadeTimer) {
+            clearTimeout(homePillFadeTimer);
+            homePillFadeTimer = null;
+          }
+          state.pillHover = false;
+          canvas.style.cursor = "";
+          overlay.classList.remove("is-won");
+          stopSound("music");
+          playSound("gameOver");
+        }
+
+        // Triggered when score reaches WIN_SCORE — show congrats screen + fireworks.
+        function showWin() {
+          state.mode = "won";
+          if (overlayFadeTimer) {
+            clearTimeout(overlayFadeTimer);
+            overlayFadeTimer = null;
+          }
+          titleEl.textContent = "Congratulations!";
+          messageEl.textContent = `You made it to ${Math.floor(state.score)
+            .toString()
+            .padStart(4, "0")}`;
+          startButton.textContent = "Play Again";
+          overlay.classList.remove("is-gameover");
+          overlay.classList.add("is-won");
+          overlay.classList.remove("is-hidden");
+          if (homePillFadeTimer) {
+            clearTimeout(homePillFadeTimer);
+            homePillFadeTimer = null;
+          }
+          state.pillHover = false;
+          canvas.style.cursor = "";
+          state.fireworkTimer = 0; // fire first burst immediately
+          stopSound("music");
+          playSound("win");
+        }
+
+        // Festive radial burst — used continuously during the win state.
+        function spawnFirework() {
+          // Brand palette (skipping the dark + sand tones, which read poorly on sky).
+          const colors = [
+            "#72A5F2",
+            "#FF6433",
+            "#FFFFFF",
+            "#C19BFF",
+            "#FFA05A",
+            "#FFD96E",
+          ];
+          const color = randomItem(colors);
+          const x = randomBetween(state.width * 0.12, state.width * 0.88);
+          const y = randomBetween(state.height * 0.15, state.height * 0.55);
+          for (let i = 0; i < 26; i += 1) {
+            const angle = Math.random() * Math.PI * 2;
+            const speed = randomBetween(160, 360);
+            state.particles.push(
+              getObject(particlePool, {
+                x,
+                y,
+                vx: Math.cos(angle) * speed,
+                vy: Math.sin(angle) * speed,
+                size: randomBetween(4, 8),
+                life: randomBetween(0.9, 1.5),
+                maxLife: 1.5,
+                gravity: 260,
+                color,
+                shape: "sparkle",
+                rotation: Math.random() * Math.PI,
+              }),
+            );
+          }
+        }
+
+        function returnHome() {
+          window.location.href = CONFIG.homeUrl;
+        }
+
+        function jump() {
+          if (
+            state.mode === "start" ||
+            state.mode === "gameover" ||
+            state.mode === "won"
+          ) {
+            resetGame();
+            return;
+          }
+          if (!player.grounded) return;
+          player.vy = CONFIG.jumpForce;
+          player.grounded = false;
+          // Background music can't autoplay before the first user gesture, so
+          // we (re)kick it on every jump as a fallback.
+          ensureMusic();
+        }
+
+        function updateUI() {
+          scoreEl.textContent = Math.floor(state.score).toString().padStart(4, "0");
+          healthEl.innerHTML = "";
+          for (let i = 0; i < CONFIG.maxHealth; i += 1) {
+            const cup = document.createElement("span");
+            cup.className = `kofi-cup${i < state.health ? " is-full" : ""}`;
+            healthEl.appendChild(cup);
+          }
+        }
+
+        function getObject(pool, defaults) {
+          return Object.assign(pool.pop() || {}, defaults, { active: true });
+        }
+
+        function releaseObject(item, pool) {
+          item.active = false;
+          pool.push(item);
+        }
+
+        function spawnObstacle() {
+          // Draw from the shuffled bag instead of pure-random so the same
+          // obstacle can't appear back-to-back (or even twice within a full
+          // 14-item cycle).
+          const image = pickObstacleImage();
+          // Height controls jump difficulty; width follows the image's natural
+          // aspect ratio so PNGs of any shape never get squashed.
+          // (Range bumped +20% from the previous 40–57.)
+          const height = randomBetween(48, 68);
+          const aspect =
+            image && image.complete && image.naturalWidth > 0
+              ? image.naturalWidth / image.naturalHeight
+              : 1;
+          const width = height * aspect;
+          const spawnX = state.width + randomBetween(90, 170);
+          // Tie obstacle to world distance so it scrolls at exactly the floor's speed.
+          const item = getObject(obstaclePool, {
+            x: spawnX,
+            spawnX,
+            spawnDistance: state.distance,
+            y: state.floorY - height + 4,
+            width,
+            height,
+            image,
+            hit: false,
+          });
+          state.obstacles.push(item);
+        }
+
+        function spawnCollectible() {
+          const image = images.collectible;
+          const baseHeight = 35;
+          // Width follows the image's natural aspect ratio (no squashing).
+          const aspect =
+            image && image.complete && image.naturalWidth > 0
+              ? image.naturalWidth / image.naturalHeight
+              : 44 / 35;
+          const item = getObject(collectiblePool, {
+            x: state.width + 90,
+            y: state.floorY - randomBetween(150, 235),
+            width: baseHeight * aspect,
+            height: baseHeight,
+            image,
+            phase: Math.random() * Math.PI * 2,
+          });
+          state.collectibles.push(item);
+        }
+
+        // Collect effect — soft sparkles drifting upward + a gentle expanding ring.
+        function spawnCollectEffect(x, y) {
+          for (let i = 0; i < 16; i += 1) {
+            // Bias direction upward so sparkles look like rising "magic".
+            const angle = -Math.PI / 2 + (Math.random() - 0.5) * Math.PI * 0.95;
+            const speed = randomBetween(70, 210);
+            state.particles.push(
+              getObject(particlePool, {
+                x,
+                y,
+                vx: Math.cos(angle) * speed,
+                vy: Math.sin(angle) * speed,
+                size: randomBetween(3, 6),
+                life: 0.9,
+                maxLife: 0.9,
+                gravity: 180,
+                color: "#C09BFF",
+                shape: "sparkle",
+                rotation: Math.random() * Math.PI,
+              }),
+            );
+          }
+          state.rings.push({
+            x,
+            y,
+            radius: 6,
+            maxRadius: 68,
+            life: 0.55,
+            maxLife: 0.55,
+            color: "#C09BFF",
+          });
+        }
+
+        // Hit effect — explosive radial scatter + screen shake.
+        function spawnHitEffect(x, y) {
+          for (let i = 0; i < 24; i += 1) {
+            const angle = Math.random() * Math.PI * 2;
+            const speed = randomBetween(180, 380);
+            state.particles.push(
+              getObject(particlePool, {
+                x,
+                y,
+                vx: Math.cos(angle) * speed,
+                vy: Math.sin(angle) * speed,
+                size: randomBetween(4, 9),
+                life: 0.55,
+                maxLife: 0.55,
+                gravity: 780,
+                color: "#C09BFF",
+                shape: "shard",
+                rotation: Math.random() * Math.PI,
+              }),
+            );
+          }
+          // Trigger a brief screen shake to sell the impact.
+          state.shake = Math.max(state.shake, 0.36);
+        }
+
+        function update(delta) {
+          // Fade the canvas scene title on both game-over and win states.
+          const targetVis =
+            state.mode === "gameover" || state.mode === "won" ? 0 : 1;
+          state.titleVisibility +=
+            (targetVis - state.titleVisibility) * Math.min(1, delta * 6);
+
+          // Continuous fireworks during the win celebration.
+          if (state.mode === "won") {
+            state.fireworkTimer -= delta;
+            if (state.fireworkTimer <= 0) {
+              spawnFirework();
+              state.fireworkTimer = randomBetween(0.25, 0.6);
+            }
+          }
+
+          if (state.mode !== "playing") {
+            updateParticles(delta);
+            return;
+          }
+
+          state.distance += state.speed * delta;
+          state.score += delta * state.speed * 0.025;
+          state.speed = Math.min(CONFIG.maxSpeed, CONFIG.startSpeed + state.score * 1.2);
+          state.animTime += delta * 16;
+          state.invulnerable = Math.max(0, state.invulnerable - delta);
+
+          // Gravity system: vertical velocity changes first, then position follows.
+          player.vy += CONFIG.gravity * delta;
+          player.y += player.vy * delta;
+          const floor = playerFloorY();
+          if (player.y >= floor) {
+            player.y = floor;
+            player.vy = 0;
+            player.grounded = true;
+          }
+
+          state.obstacleTimer -= delta;
+          if (state.obstacleTimer <= 0) {
+            spawnObstacle();
+            state.obstacleTimer = randomBetween(1.25, 2.15) * Math.max(0.78, 1 - state.score / 4200);
+          }
+
+          state.collectibleTimer -= delta;
+          if (state.collectibleTimer <= 0) {
+            spawnCollectible();
+            state.collectibleTimer = randomBetween(3.4, 5.8);
+          }
+
+          updateObstacles(delta);
+          updateCollectibles(delta);
+          updateParticles(delta);
+          updateUI();
+
+          // Win condition — reaching WIN_SCORE ends the run with a celebration.
+          if (state.score >= WIN_SCORE) {
+            showWin();
+          }
+        }
+
+        function updateObstacles(delta) {
+          const hitbox = playerHitbox();
+          for (let i = state.obstacles.length - 1; i >= 0; i -= 1) {
+            const item = state.obstacles[i];
+            // Position is locked to world distance — guarantees same speed as the floor.
+            item.x = item.spawnX - (state.distance - item.spawnDistance);
+            if (rectsOverlap(hitbox, item) && !item.hit && state.invulnerable <= 0) {
+              item.hit = true;
+              state.health -= 1;
+              state.invulnerable = 1.05;
+              spawnHitEffect(hitbox.x + hitbox.width / 2, hitbox.y + hitbox.height / 2);
+              playSound("hit");
+              if (state.health <= 0) showGameOver();
+            }
+            if (item.x + item.width < -80) {
+              state.obstacles.splice(i, 1);
+              releaseObject(item, obstaclePool);
+            }
+          }
+        }
+
+        function updateCollectibles(delta) {
+          const hitbox = playerHitbox();
+          for (let i = state.collectibles.length - 1; i >= 0; i -= 1) {
+            const item = state.collectibles[i];
+            item.x -= state.speed * 0.82 * delta;
+            item.phase += delta * 4;
+            const floatingBox = { ...item, y: item.y + Math.sin(item.phase) * 8 };
+            if (rectsOverlap(hitbox, floatingBox)) {
+              state.health = Math.min(CONFIG.maxHealth, state.health + 1);
+              state.score += 40;
+              spawnCollectEffect(item.x + item.width / 2, item.y + item.height / 2);
+              playSound("coffee");
+              state.collectibles.splice(i, 1);
+              releaseObject(item, collectiblePool);
+              continue;
+            }
+            if (item.x + item.width < -80) {
+              state.collectibles.splice(i, 1);
+              releaseObject(item, collectiblePool);
+            }
+          }
+        }
+
+        function updateParticles(delta) {
+          for (let i = state.particles.length - 1; i >= 0; i -= 1) {
+            const item = state.particles[i];
+            item.life -= delta;
+            item.x += item.vx * delta;
+            item.y += item.vy * delta;
+            item.vy += (item.gravity ?? 600) * delta;
+            if (item.shape === "shard") item.rotation += delta * 6;
+            if (item.life <= 0) {
+              state.particles.splice(i, 1);
+              releaseObject(item, particlePool);
+            }
+          }
+          // Expanding rings (collect effect)
+          for (let i = state.rings.length - 1; i >= 0; i -= 1) {
+            const ring = state.rings[i];
+            ring.life -= delta;
+            if (ring.life <= 0) state.rings.splice(i, 1);
+          }
+          // Screen-shake decay (hit effect)
+          if (state.shake > 0) state.shake = Math.max(0, state.shake - delta);
+        }
+
+        function playerHitbox() {
+          return {
+            x: player.x + player.width * 0.28,
+            y: player.y + player.height * 0.16,
+            width: player.width * 0.46,
+            height: player.height * 0.66,
+          };
+        }
+
+        function playerFloorY() {
+          return state.floorY - player.height + player.groundInset;
+        }
+
+        // Collision detection uses simple rectangles for speed and predictable gameplay.
+        function rectsOverlap(a, b) {
+          return (
+            a.x < b.x + b.width &&
+            a.x + a.width > b.x &&
+            a.y < b.y + b.height &&
+            a.y + a.height > b.y
+          );
+        }
+
+        function draw() {
+          ctx.clearRect(0, 0, state.width, state.height);
+          // Apply screen shake (hit effect). Save/restore so HUD stays steady.
+          let shaking = false;
+          if (state.shake > 0) {
+            const intensity = state.shake * 18;
+            const sx = (Math.random() - 0.5) * intensity;
+            const sy = (Math.random() - 0.5) * intensity;
+            ctx.save();
+            ctx.translate(sx, sy);
+            shaking = true;
+          }
+          drawBackground();
+          // Scene title (404 + subtitle + Return Home pill) — drawn here so the
+          // ko-fi cup collectibles, obstacles, and player render IN FRONT of it.
+          drawSceneTitle();
+          drawWorld();
+          drawPlayer();
+          drawParticles();
+          if (shaking) ctx.restore();
+        }
+
+        function drawBackground() {
+          ctx.fillStyle = CONFIG.skyColor;
+          ctx.fillRect(0, 0, state.width, state.height);
+          // Furthest back: small sparse clouds (cloudA + cloudB PNGs), drifting slowly
+          // and spaced far apart so the sky reads as quiet, not busy.
+          drawParallaxProps(
+            images.backgrounds.cloudA,
+            0.004,
+            [
+              { x: 0.12, y: 0.09, size: 130 },
+              { x: 0.74, y: 0.14, size: 110 },
+            ],
+            2600,
+          );
+          drawParallaxProps(
+            images.backgrounds.cloudB,
+            0.004,
+            [
+              { x: 0.42, y: 0.20, size: 140 },
+              { x: 0.92, y: 0.07, size: 118 },
+            ],
+            2800,
+          );
+          drawParallaxProps(
+            images.backgrounds.rock,
+            0.002,
+            [{ x: 0.43, y: 0.15, size: Math.min(250, state.width * 0.24) }],
+            2200,
+          );
+          drawParallaxProps(
+            images.backgrounds.star,
+            0.006,
+            [
+              { x: 0.05, y: 0.08, size: 13 },
+              { x: 0.26, y: 0.45, size: 17 },
+              { x: 0.47, y: 0.2, size: 14 },
+              { x: 0.68, y: 0.27, size: 12 },
+              { x: 0.88, y: 0.14, size: 11 },
+            ],
+            1200,
+          );
+          drawParallaxProps(
+            images.backgrounds.cloud1,
+            0.012,
+            [
+              { x: 0.08, y: 0.28, size: 118 },
+              { x: 0.42, y: 0.16, size: 96 },
+              { x: 0.78, y: 0.35, size: 126 },
+            ],
+            1380,
+          );
+          drawParallaxProps(
+            images.backgrounds.cloud2,
+            0.016,
+            [
+              { x: 0.18, y: 0.39, size: 108 },
+              { x: 0.58, y: 0.31, size: 84 },
+              { x: 0.88, y: 0.18, size: 102 },
+            ],
+            1290,
+          );
+          drawMixedParallaxProps(
+            [
+              { image: images.backgrounds.background1, x: 0.07, size: 54, yOffset: 0 },
+              { image: images.backgrounds.background3, x: 0.34, size: 58, yOffset: -12 },
+              { image: images.backgrounds.background1, x: 0.72, size: 62, yOffset: 0 },
+              { image: images.backgrounds.background3, x: 0.94, size: 48, yOffset: -10 },
+            ],
+            0.028,
+            1120,
+            state.floorY - 108,
+          );
+          drawParallaxProps(
+            images.backgrounds.background2,
+            0.045,
+            [
+              { x: 0.29, y: 0, size: 124 },
+              { x: 0.74, y: 0, size: 112 },
+            ],
+            980,
+            state.floorY - 32,
+          );
+        }
+
+        // Canvas-drawn scene title (404 + Page Not Found + Return Home pill).
+        // Drawn between background and world so collectibles / player render in front.
+        function drawSceneTitle() {
+          if (state.titleVisibility <= 0.01) return;
+          const baseAlpha = state.titleVisibility;
+          const cx = state.width / 2;
+          // Mobile gets bumped sizes (404 +20%, subtitle/pill +15%) and a clear
+          // 25px gap between the numeral and the subtitle for better legibility.
+          const isMobile = state.width < 640;
+          const titleMul = isMobile ? 1.2 : 1;
+          const subMul = isMobile ? 1.15 : 1;
+
+          ctx.save();
+
+          // --- "404" big italic numeral ---
+          const titleSize =
+            Math.max(56, Math.min(state.width * 0.16, state.height * 0.27)) *
+            titleMul;
+          // Roughly matches the old HTML position (top: 13%, line-height 0.84)
+          const titleY = state.height * 0.13 + titleSize * 0.42;
+          ctx.globalAlpha = baseAlpha;
+          ctx.fillStyle = "#C09BFF";
+          ctx.font = `italic 950 ${titleSize}px "DM Sans", Inter, system-ui, sans-serif`;
+          ctx.textAlign = "center";
+          ctx.textBaseline = "middle";
+          ctx.fillText("404", cx, titleY);
+
+          // --- "PAGE NOT FOUND" small uppercase subtitle ---
+          const subSize =
+            Math.max(11, Math.min(state.width * 0.014, 14)) * subMul;
+          // Mobile: 10px gap below 404. Desktop: tight overlap as before.
+          const subY = isMobile
+            ? titleY + titleSize * 0.5 + 10 + subSize * 0.5
+            : titleY + titleSize * 0.42 - subSize * 0.3;
+          ctx.fillStyle = "rgba(32, 32, 32, 0.55)";
+          ctx.font = `800 ${subSize}px "DM Sans", Inter, system-ui, sans-serif`;
+          // Canvas2D letterSpacing — modern browsers (Chrome 99+, Safari 16.4+).
+          const supportsLetterSpacing = "letterSpacing" in ctx;
+          if (supportsLetterSpacing) ctx.letterSpacing = `${subSize * 0.34}px`;
+          ctx.fillText("PAGE NOT FOUND", cx, subY);
+          if (supportsLetterSpacing) ctx.letterSpacing = "0px";
+
+          // --- "Return Home" pill ---
+          const pillFontSize = Math.max(11, subSize * 1.05);
+          ctx.font = `800 ${pillFontSize}px "DM Sans", Inter, system-ui, sans-serif`;
+          const pillTextWidth = ctx.measureText("Return Home").width;
+          const pillPaddingX = pillFontSize * 1.6;
+          const pillPaddingY = pillFontSize * 0.78;
+          const pillW = pillTextWidth + pillPaddingX * 2;
+          const pillH = pillFontSize + pillPaddingY * 2;
+          const pillY = subY + subSize / 2 + 8;
+          const pillX = cx - pillW / 2;
+
+          // Stash bounds for hit-testing in pointer handlers (CSS pixels).
+          state.pillBounds = { x: pillX, y: pillY, w: pillW, h: pillH };
+
+          // Pill alpha: full when hovered, faded after auto-fade timer fires.
+          const pillAlpha = state.pillFaded && !state.pillHover ? 0.42 : 1;
+          ctx.globalAlpha = baseAlpha * pillAlpha;
+          ctx.beginPath();
+          ctx.roundRect(pillX, pillY, pillW, pillH, pillH / 2);
+          ctx.fillStyle = "#ffffff";
+          ctx.fill();
+          ctx.strokeStyle = "rgba(32, 32, 32, 0.55)";
+          ctx.lineWidth = 1;
+          ctx.stroke();
+          // Subtle hover lift cue (slightly darker text)
+          ctx.fillStyle = state.pillHover ? "#000000" : "#202020";
+          ctx.textBaseline = "middle";
+          ctx.fillText("Return Home", cx, pillY + pillH / 2);
+
+          ctx.restore();
+        }
+
+        function drawParallaxLayer(image, speedFactor, y, layerHeight, overlap = 0) {
+          if (!image.complete || image.naturalWidth === 0) return;
+          const tileWidth = (image.naturalWidth / image.naturalHeight) * layerHeight;
+          const offset = -((state.distance * speedFactor) % tileWidth);
+          const step = Math.max(1, tileWidth - overlap);
+          for (let x = offset - tileWidth; x < state.width + tileWidth; x += step) {
+            ctx.drawImage(image, x, y, tileWidth, layerHeight);
+          }
+        }
+
+        function drawParallaxProps(image, speedFactor, placements, spacing, baseY = null) {
+          if (!image.complete || image.naturalWidth === 0) return;
+          const travel = Math.max(spacing, state.width * 0.72);
+          const offset = -((state.distance * speedFactor) % travel);
+          placements.forEach((placement) => {
+            const drawWidth = placement.size;
+            const drawHeight = (image.naturalHeight / image.naturalWidth) * drawWidth;
+            const y = baseY === null ? state.height * placement.y : baseY;
+            for (
+              let x = state.width * placement.x + offset - travel;
+              x < state.width + travel;
+              x += travel
+            ) {
+              ctx.drawImage(image, x, y, drawWidth, drawHeight);
+            }
+          });
+        }
+
+        function drawMixedParallaxProps(items, speedFactor, spacing, baseY) {
+          const travel = Math.max(spacing, state.width * 0.78);
+          const offset = -((state.distance * speedFactor) % travel);
+          items.forEach((item) => {
+            if (!item.image.complete || item.image.naturalWidth === 0) return;
+            const drawWidth = item.size;
+            const drawHeight = (item.image.naturalHeight / item.image.naturalWidth) * drawWidth;
+            const y = baseY + item.yOffset;
+            for (
+              let x = state.width * item.x + offset - travel;
+              x < state.width + travel;
+              x += travel
+            ) {
+              ctx.drawImage(item.image, x, y, drawWidth, drawHeight);
+            }
+          });
+        }
+
+        function drawWorld() {
+          ctx.fillStyle = CONFIG.floorColor;
+          ctx.fillRect(0, state.floorY, state.width, state.height - state.floorY);
+          // Floor texture spans the full ground area (floor line → canvas
+          // bottom) so there's no flat-color gap below the dirt.
+          drawParallaxLayer(
+            images.backgrounds.floor,
+            1,
+            state.floorY,
+            Math.max(70, state.height - state.floorY),
+            1,
+          );
+
+          state.collectibles.forEach((item) => {
+            const y = item.y + Math.sin(item.phase) * 8;
+            drawImageOrCup(item.image, item.x, y, item.width, item.height);
+          });
+
+          state.obstacles.forEach((item) => {
+            drawImageOrBlock(item.image, item.x, item.y, item.width, item.height);
+          });
+        }
+
+        // Animation handling: frame index advances with score/speed, then wraps.
+        function drawPlayer() {
+          const frame = images.character[Math.floor(state.animTime) % images.character.length];
+          // Keep player.width in sync with the current frame's natural aspect so a
+          // sprite swap (or images that finish loading after resize) doesn't squash.
+          if (frame && frame.complete && frame.naturalWidth > 0) {
+            player.width = player.height * (frame.naturalWidth / frame.naturalHeight);
+          }
+          const blink = state.invulnerable > 0 && Math.floor(state.invulnerable * 18) % 2 === 0;
+          if (blink) ctx.globalAlpha = 0.45;
+          if (frame && frame.complete && frame.naturalWidth > 0) {
+            ctx.drawImage(frame, player.x, player.y, player.width, player.height);
+          } else {
+            ctx.fillStyle = "#FFFFFF";
+            ctx.strokeStyle = "#202020";
+            ctx.lineWidth = 3;
+            roundedRect(player.x, player.y, player.width * 0.7, player.height * 0.8, 18, true, true);
+          }
+          ctx.globalAlpha = 1;
+        }
+
+        function drawParticles() {
+          state.particles.forEach((item) => {
+            const maxLife = item.maxLife || 0.7;
+            const lifeRatio = Math.max(0, item.life / maxLife);
+            ctx.globalAlpha = lifeRatio;
+            ctx.fillStyle = item.color;
+            if (item.shape === "sparkle") {
+              // 4-point star (collect)
+              drawSparkle(item.x, item.y, item.size * (0.6 + lifeRatio * 0.4));
+            } else if (item.shape === "shard") {
+              // Rotating square shard (hit)
+              ctx.save();
+              ctx.translate(item.x, item.y);
+              ctx.rotate(item.rotation || 0);
+              ctx.fillRect(-item.size / 2, -item.size / 2, item.size, item.size);
+              ctx.restore();
+            } else {
+              ctx.beginPath();
+              ctx.arc(item.x, item.y, item.size, 0, Math.PI * 2);
+              ctx.fill();
+            }
+          });
+          // Draw expanding rings on top of particles for the collect "pop".
+          state.rings.forEach((ring) => {
+            const t = 1 - ring.life / ring.maxLife;
+            const radius = ring.radius + (ring.maxRadius - ring.radius) * t;
+            ctx.globalAlpha = Math.max(0, ring.life / ring.maxLife);
+            ctx.strokeStyle = ring.color;
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.arc(ring.x, ring.y, radius, 0, Math.PI * 2);
+            ctx.stroke();
+          });
+          ctx.globalAlpha = 1;
+        }
+
+        function drawSparkle(x, y, size) {
+          // Diamond-like 4-point sparkle
+          ctx.beginPath();
+          ctx.moveTo(x, y - size);
+          ctx.lineTo(x + size * 0.35, y - size * 0.35);
+          ctx.lineTo(x + size, y);
+          ctx.lineTo(x + size * 0.35, y + size * 0.35);
+          ctx.lineTo(x, y + size);
+          ctx.lineTo(x - size * 0.35, y + size * 0.35);
+          ctx.lineTo(x - size, y);
+          ctx.lineTo(x - size * 0.35, y - size * 0.35);
+          ctx.closePath();
+          ctx.fill();
+        }
+
+        function drawImageOrBlock(image, x, y, width, height) {
+          if (image && image.complete && image.naturalWidth > 0) {
+            ctx.drawImage(image, x, y, width, height);
+            return;
+          }
+          ctx.fillStyle = "#EDE6DD";
+          ctx.strokeStyle = "#202020";
+          ctx.lineWidth = 3;
+          roundedRect(x, y, width, height, 10, true, true);
+        }
+
+        function drawImageOrCup(image, x, y, width, height) {
+          if (image && image.complete && image.naturalWidth > 0) {
+            ctx.drawImage(image, x, y, width, height);
+            return;
+          }
+          ctx.fillStyle = "#FFFFFF";
+          ctx.strokeStyle = "#202020";
+          ctx.lineWidth = 3;
+          roundedRect(x, y, width, height, 14, true, true);
+          ctx.fillStyle = "#C09BFF";
+          ctx.beginPath();
+          ctx.arc(x + width * 0.48, y + height * 0.5, height * 0.18, 0, Math.PI * 2);
+          ctx.fill();
+        }
+
+        function roundedRect(x, y, width, height, radius, fill, stroke) {
+          ctx.beginPath();
+          ctx.roundRect(x, y, width, height, radius);
+          if (fill) ctx.fill();
+          if (stroke) ctx.stroke();
+        }
+
+        function randomBetween(min, max) {
+          return min + Math.random() * (max - min);
+        }
+
+        function randomItem(items) {
+          return items[Math.floor(Math.random() * items.length)];
+        }
+
+        // requestAnimationFrame loop with delta time keeps speed stable across displays.
+        function loop(time) {
+          const delta = state.lastTime ? Math.min(0.033, (time - state.lastTime) / 1000) : 0;
+          state.lastTime = time;
+          update(delta);
+          draw();
+          requestAnimationFrame(loop);
+        }
+
+        window.addEventListener("resize", resize);
+        window.addEventListener("keydown", (event) => {
+          if (event.code === "Space" || event.code === "ArrowUp") {
+            event.preventDefault();
+            jump();
+          }
+          // DEBUG: press "W" to skip straight to the win celebration. Safe to
+          // remove this block before shipping.
+          if (event.code === "KeyW" && state.mode === "playing") {
+            event.preventDefault();
+            state.score = WIN_SCORE;
+            showWin();
+          }
+        });
+
+        // Convert a pointer/touch clientX,Y into canvas-space coordinates.
+        function eventToCanvasCoords(clientX, clientY) {
+          const rect = canvas.getBoundingClientRect();
+          return {
+            x: ((clientX - rect.left) * state.width) / rect.width,
+            y: ((clientY - rect.top) * state.height) / rect.height,
+          };
+        }
+
+        function isPointOverPill(x, y) {
+          const b = state.pillBounds;
+          if (!b || state.titleVisibility < 0.5) return false;
+          return x >= b.x && x <= b.x + b.w && y >= b.y && y <= b.y + b.h;
+        }
+
+        // Touch controls: prevent scroll. Actual pill/jump dispatch happens in
+        // pointerdown which fires for both mouse and touch.
+        root.addEventListener(
+          "touchstart",
+          (event) => {
+            if (event.target.closest("button")) return;
+            event.preventDefault();
+          },
+          { passive: false },
+        );
+
+        // Hover: show pointer cursor when over the canvas pill.
+        canvas.addEventListener("pointermove", (event) => {
+          const { x, y } = eventToCanvasCoords(event.clientX, event.clientY);
+          const overPill = isPointOverPill(x, y);
+          state.pillHover = overPill;
+          canvas.style.cursor = overPill ? "pointer" : "";
+        });
+
+        canvas.addEventListener("pointerleave", () => {
+          state.pillHover = false;
+          canvas.style.cursor = "";
+        });
+
+        // Click / tap: if it's on the pill, return home; otherwise jump.
+        canvas.addEventListener("pointerdown", (event) => {
+          const { x, y } = eventToCanvasCoords(event.clientX, event.clientY);
+          if (isPointOverPill(x, y)) {
+            returnHome();
+            return;
+          }
+          jump();
+        });
+
+        startButton.addEventListener("click", resetGame);
+        homeButton.addEventListener("click", returnHome);
+
+        // Sound on/off button. Click stops propagation so it doesn't also fire
+        // the canvas pointerdown -> jump handler underneath.
+        if (soundToggleEl) {
+          soundToggleEl.addEventListener("click", (event) => {
+            event.stopPropagation();
+            setSoundEnabled(!soundEnabled);
+          });
+          soundToggleEl.addEventListener("pointerdown", (event) =>
+            event.stopPropagation(),
+          );
+        }
+        updateSoundButton();
+
+        updateUI();
+        resize();
+        // Auto-start: the player runs the moment the page loads.
+        resetGame();
+        requestAnimationFrame(loop);
+      })();
+    </script>
+  </body>
+</html>
