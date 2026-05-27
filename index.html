@@ -165,7 +165,10 @@
       }
 
       .kofi-overlay.is-gameover h1 {
-        display: none;
+        font-size: clamp(1.6rem, 5vw, 2.4rem);
+        font-style: italic;
+        color: #C09BFF;
+        line-height: 1;
       }
 
       /* Win state — shown when score reaches 10,000. Reuses the gameover layout
@@ -219,8 +222,8 @@
 
       .kofi-actions {
         display: flex;
-        flex-wrap: wrap;
-        justify-content: center;
+        flex-direction: column;
+        align-items: center;
         gap: 10px;
       }
 
@@ -350,7 +353,7 @@
             <h1 data-title>404 — Page Not Found</h1>
             <p data-message>The page is missing. What do you do?</p>
             <div class="kofi-actions">
-              <button class="kofi-button" type="button" data-home>Return Home</button>
+              <button class="kofi-button" type="button" data-home>Back to Ko-fi</button>
               <button class="kofi-button is-primary" type="button" data-start>
                 Try Again
               </button>
@@ -428,6 +431,7 @@
             (_, i) => encodeURI(`assets/obstacles/Asset ${i + 63}@2x.png`),
           ),
           collectible: "assets/collectibles/kofi-cup.png",
+          coverCharacter: "assets/cover/character-cover.png",
           // Audio assets — keys match playSound() call sites in the gameplay code.
           // coffee  -> ko-fi cup collectible pickup
           // hit     -> obstacle collision
@@ -439,7 +443,7 @@
             hit: "assets/sound/hit.mp3",
             gameOver: "assets/sound/game-over.mp3",
             win: "assets/sound/win.mp3",
-            music: "assets/sound/music-loops.mp3",
+            // music removed — background music disabled, SFX only
           },
         };
 
@@ -450,6 +454,7 @@
           backgrounds: Object.fromEntries(
             Object.entries(ASSETS.backgrounds).map(([key, src]) => [key, loadImage(src)]),
           ),
+          coverCharacter: loadImage(ASSETS.coverCharacter),
         };
 
         // Volume is dimmed ~10% from the browser default. Music sits lower so it
@@ -506,7 +511,9 @@
           titleVisibility: 1, // 1 = visible, 0 = hidden; tweens on game over / win
           pillFaded: false,
           pillHover: false,
-          pillBounds: null, // { x, y, w, h } — populated each frame in drawSceneTitle
+          pillBounds: null,     // { x, y, w, h } — populated each frame in drawSceneTitle
+          playBtnBounds: null,  // play button on start screen
+          playBtnHover: false,
           // Win state
           fireworkTimer: 0, // counts down between firework bursts when mode === "won"
         };
@@ -521,6 +528,7 @@
           groundInset: 16,
           vy: 0,
           grounded: true,
+          paceDir: 1,   // 1 = moving right, -1 = moving left (start screen only)
         };
 
         // Object pools keep allocations low during long endless runs.
@@ -688,7 +696,7 @@
           state.distance = 0;
           state.health = CONFIG.maxHealth;
           state.speed = CONFIG.startSpeed;
-          state.obstacleTimer = 1.1;
+          state.obstacleTimer = 0.3; // First obstacle arrives almost immediately after pressing Play.
           state.collectibleTimer = 2.4;
           state.animTime = 0;
           state.invulnerable = 0;
@@ -703,6 +711,8 @@
           // Drain the obstacle bag so each new run starts with a fresh shuffle.
           obstacleBag = [];
           lastObstacleImage = null;
+          player.x = 92;
+          player.paceDir = 1;
           player.y = playerFloorY();
           player.vy = 0;
           player.grounded = true;
@@ -741,11 +751,15 @@
         function showStart() {
           state.mode = "start";
           state.distance = 0;
-          titleEl.textContent = "404 — Page Not Found";
-          messageEl.textContent = "The page is missing. What do you do?";
-          startButton.textContent = "Press Space / Tap To Explore";
+          state.pillFaded = false;
+          state.playBtnHover = false;
+          player.x = 92;
+          player.paceDir = 1;
+          if (homePillFadeTimer) { clearTimeout(homePillFadeTimer); homePillFadeTimer = null; }
+          // Start screen is drawn entirely on canvas — the HTML overlay stays hidden.
           overlay.classList.remove("is-gameover");
-          overlay.classList.remove("is-hidden");
+          overlay.classList.remove("is-won");
+          overlay.classList.add("is-hidden");
           updateUI();
           draw();
         }
@@ -758,8 +772,9 @@
             clearTimeout(overlayFadeTimer);
             overlayFadeTimer = null;
           }
+          titleEl.textContent = "Game over!";
           messageEl.textContent = `Score ${Math.floor(state.score).toString().padStart(4, "0")}`;
-          startButton.textContent = "Try Again";
+          startButton.textContent = "Play Again";
           overlay.classList.add("is-gameover");
           overlay.classList.remove("is-hidden");
           // Canvas scene-title fades out via state.titleVisibility (tweened in update()).
@@ -768,6 +783,7 @@
             homePillFadeTimer = null;
           }
           state.pillHover = false;
+          state.playBtnHover = false;
           canvas.style.cursor = "";
           overlay.classList.remove("is-won");
           stopSound("music");
@@ -1009,6 +1025,16 @@
             }
           }
 
+          // Start-screen: animate the character walking left↔right.
+          if (state.mode === "start") {
+            state.animTime += delta * 16;
+            const paceLeft  = 20;
+            const paceRight = state.width - player.width - 20;
+            player.x += player.paceDir * 110 * delta;
+            if (player.x >= paceRight) { player.x = paceRight; player.paceDir = -1; }
+            if (player.x <= paceLeft)  { player.x = paceLeft;  player.paceDir =  1; }
+          }
+
           if (state.mode !== "playing") {
             updateParticles(delta);
             return;
@@ -1016,7 +1042,16 @@
 
           state.distance += state.speed * delta;
           state.score += delta * state.speed * 0.025;
-          state.speed = Math.min(CONFIG.maxSpeed, CONFIG.startSpeed + state.score * 1.2);
+          // Desktop gets a 10% harder speed ramp; mobile stays at baseline.
+          // On desktop, every 500-point milestone adds a +20 px/s speed spike by
+          // lifting both the formula value and the effective max cap.
+          const _isDesktop = state.width >= 640;
+          const _desktopMul = _isDesktop ? 1.1 : 1;
+          const _milestoneBonus = _isDesktop ? Math.floor(state.score / 500) * 20 : 0;
+          state.speed = Math.min(
+            CONFIG.maxSpeed + _milestoneBonus,
+            CONFIG.startSpeed + state.score * 1.2 * _desktopMul + _milestoneBonus,
+          );
           state.animTime += delta * 16;
           state.invulnerable = Math.max(0, state.invulnerable - delta);
 
@@ -1033,7 +1068,9 @@
           state.obstacleTimer -= delta;
           if (state.obstacleTimer <= 0) {
             spawnObstacle();
-            state.obstacleTimer = randomBetween(1.25, 2.15) * Math.max(0.78, 1 - state.score / 4200);
+            // Desktop obstacles spawn 10% more frequently than mobile.
+            const _obstFreqMul = state.width >= 640 ? 0.9 : 1;
+            state.obstacleTimer = randomBetween(1.25, 2.15) * Math.max(0.78, 1 - state.score / 4200) * _obstFreqMul;
           }
 
           state.collectibleTimer -= delta;
@@ -1156,8 +1193,8 @@
             shaking = true;
           }
           drawBackground();
-          // Scene title (404 + subtitle + Return Home pill) — drawn here so the
-          // ko-fi cup collectibles, obstacles, and player render IN FRONT of it.
+          // Scene title (404 + subtitle + Back to Ko-fi pill) — drawn here so
+          // collectibles, obstacles, and player render in front of it.
           drawSceneTitle();
           drawWorld();
           drawPlayer();
@@ -1288,37 +1325,52 @@
           // Canvas2D letterSpacing — modern browsers (Chrome 99+, Safari 16.4+).
           const supportsLetterSpacing = "letterSpacing" in ctx;
           if (supportsLetterSpacing) ctx.letterSpacing = `${subSize * 0.34}px`;
-          ctx.fillText("PAGE NOT FOUND", cx, subY);
+          ctx.fillText("The page is missing.", cx, subY);
           if (supportsLetterSpacing) ctx.letterSpacing = "0px";
 
-          // --- "Return Home" pill ---
-          const pillFontSize = Math.max(11, subSize * 1.05);
-          ctx.font = `800 ${pillFontSize}px "DM Sans", Inter, system-ui, sans-serif`;
-          const pillTextWidth = ctx.measureText("Return Home").width;
-          const pillPaddingX = pillFontSize * 1.6;
-          const pillPaddingY = pillFontSize * 0.78;
-          const pillW = pillTextWidth + pillPaddingX * 2;
-          const pillH = pillFontSize + pillPaddingY * 2;
-          const pillY = subY + subSize / 2 + 8;
-          const pillX = cx - pillW / 2;
+          // Shared button geometry — sized to match the HTML overlay .kofi-button
+          // (min-height: 46px, padding: 11px 18px, font 900 14px, min-width: 148px).
+          const pillFontSize = 14;
+          const pillPaddingX = 18;
+          const pillH        = 46;
+          const pillTop      = subY + subSize / 2 + 8;
 
-          // Stash bounds for hit-testing in pointer handlers (CSS pixels).
-          state.pillBounds = { x: pillX, y: pillY, w: pillW, h: pillH };
+          // Measure both labels so we can equalise widths.
+          ctx.font = `900 ${pillFontSize}px "DM Sans", Inter, system-ui, sans-serif`;
+          const homeRaw = Math.max(148, ctx.measureText("Back to Ko-fi").width + pillPaddingX * 2);
+          const playLabel = state.width < 640 ? "Tap to Play" : "Press Space to Play";
+          const playRaw = Math.max(148, ctx.measureText(playLabel).width + pillPaddingX * 2);
+          // Both buttons use whichever is wider.
+          const btnW = Math.max(homeRaw, playRaw);
+          const btnX = cx - btnW / 2;
 
-          // Pill alpha: full when hovered, faded after auto-fade timer fires.
+          // ── "Back to Ko-fi" — #E6D7FF fill ─────────────────────────────────
+          state.pillBounds = { x: btnX, y: pillTop, w: btnW, h: pillH };
           const pillAlpha = state.pillFaded && !state.pillHover ? 0.42 : 1;
           ctx.globalAlpha = baseAlpha * pillAlpha;
           ctx.beginPath();
-          ctx.roundRect(pillX, pillY, pillW, pillH, pillH / 2);
-          ctx.fillStyle = "#ffffff";
+          ctx.roundRect(btnX, pillTop, btnW, pillH, pillH / 2);
+          ctx.fillStyle = "#E6D7FF";
           ctx.fill();
-          ctx.strokeStyle = "rgba(32, 32, 32, 0.55)";
-          ctx.lineWidth = 1;
-          ctx.stroke();
-          // Subtle hover lift cue (slightly darker text)
-          ctx.fillStyle = state.pillHover ? "#000000" : "#202020";
+          ctx.fillStyle = "#000000";
           ctx.textBaseline = "middle";
-          ctx.fillText("Return Home", cx, pillY + pillH / 2);
+          ctx.fillText("Back to Ko-fi", cx, pillTop + pillH / 2);
+
+          // ── "Press Space to Play" — #FFFFFF fill, dark border (start only) ─
+          if (state.mode === "start") {
+            const playY = pillTop + pillH + 10;
+            state.playBtnBounds = { x: btnX, y: playY, w: btnW, h: pillH };
+            ctx.globalAlpha = baseAlpha * (state.playBtnHover ? 0.82 : 1);
+            ctx.beginPath();
+            ctx.roundRect(btnX, playY, btnW, pillH, pillH / 2);
+            ctx.fillStyle = "#FFFFFF";
+            ctx.fill();
+            ctx.fillStyle = "#000000";
+            ctx.textBaseline = "middle";
+            ctx.fillText(playLabel, cx, playY + pillH / 2);
+          } else {
+            state.playBtnBounds = null;
+          }
 
           ctx.restore();
         }
@@ -1400,6 +1452,30 @@
           if (frame && frame.complete && frame.naturalWidth > 0) {
             player.width = player.height * (frame.naturalWidth / frame.naturalHeight);
           }
+
+          // Start screen: draw the walking animation, flipping horizontally when
+          // the character is heading left (paceDir === -1).
+          if (state.mode === "start") {
+            if (frame && frame.complete && frame.naturalWidth > 0) {
+              ctx.save();
+              if (player.paceDir === -1) {
+                // Mirror around the sprite's horizontal centre.
+                ctx.translate(player.x + player.width / 2, 0);
+                ctx.scale(-1, 1);
+                ctx.translate(-(player.x + player.width / 2), 0);
+              }
+              ctx.drawImage(frame, player.x, player.y, player.width, player.height);
+              ctx.restore();
+            } else {
+              ctx.fillStyle = "#FFFFFF";
+              ctx.strokeStyle = "#202020";
+              ctx.lineWidth = 3;
+              roundedRect(player.x, player.y, player.width * 0.7, player.height * 0.8, 18, true, true);
+            }
+            return;
+          }
+
+          // Normal gameplay animation.
           const blink = state.invulnerable > 0 && Math.floor(state.invulnerable * 18) % 2 === 0;
           if (blink) ctx.globalAlpha = 0.45;
           if (frame && frame.complete && frame.naturalWidth > 0) {
@@ -1544,6 +1620,12 @@
           return x >= b.x && x <= b.x + b.w && y >= b.y && y <= b.y + b.h;
         }
 
+        function isPointOverPlayBtn(x, y) {
+          const b = state.playBtnBounds;
+          if (!b) return false;
+          return x >= b.x && x <= b.x + b.w && y >= b.y && y <= b.y + b.h;
+        }
+
         // Touch controls: prevent scroll. Actual pill/jump dispatch happens in
         // pointerdown which fires for both mouse and touch.
         root.addEventListener(
@@ -1555,26 +1637,25 @@
           { passive: false },
         );
 
-        // Hover: show pointer cursor when over the canvas pill.
+        // Hover: pointer cursor over Back to Ko-fi pill or Play button.
         canvas.addEventListener("pointermove", (event) => {
           const { x, y } = eventToCanvasCoords(event.clientX, event.clientY);
-          const overPill = isPointOverPill(x, y);
-          state.pillHover = overPill;
-          canvas.style.cursor = overPill ? "pointer" : "";
+          state.pillHover    = isPointOverPill(x, y);
+          state.playBtnHover = isPointOverPlayBtn(x, y);
+          canvas.style.cursor = (state.pillHover || state.playBtnHover) ? "pointer" : "";
         });
 
         canvas.addEventListener("pointerleave", () => {
           state.pillHover = false;
+          state.playBtnHover = false;
           canvas.style.cursor = "";
         });
 
-        // Click / tap: if it's on the pill, return home; otherwise jump.
+        // Click / tap: pill → Back to Ko-fi; play button → start game; else jump.
         canvas.addEventListener("pointerdown", (event) => {
           const { x, y } = eventToCanvasCoords(event.clientX, event.clientY);
-          if (isPointOverPill(x, y)) {
-            returnHome();
-            return;
-          }
+          if (isPointOverPill(x, y)) { returnHome(); return; }
+          if (isPointOverPlayBtn(x, y)) { resetGame(); return; }
           jump();
         });
 
@@ -1594,10 +1675,18 @@
         }
         updateSoundButton();
 
+        // Tapping / clicking the overlay background (outside a button) starts the game.
+        overlay.addEventListener("pointerdown", (event) => {
+          if (event.target.closest("button")) return;
+          if (state.mode === "start" || state.mode === "gameover" || state.mode === "won") {
+            resetGame();
+          }
+        });
+
         updateUI();
         resize();
-        // Auto-start: the player runs the moment the page loads.
-        resetGame();
+        // Show the start screen and wait for the player to press Space / tap / click.
+        showStart();
         requestAnimationFrame(loop);
       })();
     </script>
