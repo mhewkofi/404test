@@ -432,7 +432,7 @@
             (_, i) => encodeURI(`assets/obstacles/Asset ${i + 63}@2x.png`),
           ),
           collectible: "assets/collectibles/kofi-cup.png",
-          coverCharacter: "assets/cover/character-cover.png",
+          coverCharacter: "assets/cover/cover-character.png",
           // Audio assets — keys match playSound() call sites in the gameplay code.
           // coffee  -> ko-fi cup collectible pickup
           // hit     -> obstacle collision
@@ -664,6 +664,12 @@
           soundToggleEl.innerHTML = soundEnabled ? SOUND_ON_SVG : SOUND_OFF_SVG;
         }
 
+        function setStartFloorPose() {
+          player.y = playerFloorY();
+          player.vy = 0;
+          player.grounded = true;
+        }
+
         function resize() {
           const rect = canvas.getBoundingClientRect();
           state.dpr = Math.min(window.devicePixelRatio || 1, 2);
@@ -688,10 +694,14 @@
           } else {
             player.width = player.height * (122 / 146); // fallback before load
           }
-          player.y = Math.min(
-            player.y || playerFloorY(),
-            playerFloorY(),
-          );
+          if (state.mode === "start") {
+            setStartFloorPose();
+          } else {
+            player.y = Math.min(
+              player.y || playerFloorY(),
+              playerFloorY(),
+            );
+          }
           draw();
         }
 
@@ -758,8 +768,10 @@
           state.distance = 0;
           state.pillFaded = false;
           state.playBtnHover = false;
+          state.animTime = 0;
           player.x = 92;
           player.paceDir = 1;
+          setStartFloorPose();
           if (homePillFadeTimer) { clearTimeout(homePillFadeTimer); homePillFadeTimer = null; }
           // Start screen is drawn entirely on canvas — the HTML overlay stays hidden.
           overlay.classList.remove("is-gameover");
@@ -1030,14 +1042,15 @@
             }
           }
 
-          // Start-screen: animate the character walking left↔right.
+          // Start-screen: animate the character walking left-right on the floor.
           if (state.mode === "start") {
             state.animTime += delta * 16;
-            const paceLeft  = 20;
+            setStartFloorPose();
+            const paceLeft = 20;
             const paceRight = state.width - player.width - 20;
             player.x += player.paceDir * 110 * delta;
             if (player.x >= paceRight) { player.x = paceRight; player.paceDir = -1; }
-            if (player.x <= paceLeft)  { player.x = paceLeft;  player.paceDir =  1; }
+            if (player.x <= paceLeft) { player.x = paceLeft; player.paceDir = 1; }
           }
 
           if (state.mode !== "playing") {
@@ -1458,13 +1471,12 @@
             player.width = player.height * (frame.naturalWidth / frame.naturalHeight);
           }
 
-          // Start screen: draw the walking animation, flipping horizontally when
-          // the character is heading left (paceDir === -1).
+          // Start screen: walking loop on the same floor line as gameplay.
           if (state.mode === "start") {
+            setStartFloorPose();
             if (frame && frame.complete && frame.naturalWidth > 0) {
               ctx.save();
               if (player.paceDir === -1) {
-                // Mirror around the sprite's horizontal centre.
                 ctx.translate(player.x + player.width / 2, 0);
                 ctx.scale(-1, 1);
                 ctx.translate(-(player.x + player.width / 2), 0);
@@ -1607,6 +1619,14 @@
             event.preventDefault();
             state.score = WIN_SCORE;
             showWin();
+          }
+        });
+
+        window.addEventListener("message", (event) => {
+          if (!event.data || event.data.type !== "kofi404:input") return;
+          if (event.source !== window.parent && event.source !== window) return;
+          if (event.data.action === "jump" || event.data.action === "play") {
+            jump();
           }
         });
 
