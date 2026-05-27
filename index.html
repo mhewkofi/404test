@@ -791,7 +791,7 @@
           }
           titleEl.textContent = "Game over!";
           messageEl.textContent = `Score ${Math.floor(state.score).toString().padStart(4, "0")}`;
-          startButton.textContent = "Play Again";
+          startButton.textContent = "Play again";
           overlay.classList.add("is-gameover");
           overlay.classList.remove("is-hidden");
           // Canvas scene-title fades out via state.titleVisibility (tweened in update()).
@@ -818,7 +818,7 @@
           messageEl.textContent = `You made it to ${Math.floor(state.score)
             .toString()
             .padStart(4, "0")}`;
-          startButton.textContent = "Play Again";
+          startButton.textContent = "Play again";
           overlay.classList.remove("is-gameover");
           overlay.classList.add("is-won");
           overlay.classList.remove("is-hidden");
@@ -1065,7 +1065,7 @@
           // lifting both the formula value and the effective max cap.
           const _isDesktop = state.width >= 640;
           const _desktopMul = _isDesktop ? 1.1 : 1;
-          const _milestoneBonus = _isDesktop ? Math.floor(state.score / 500) * 20 : 0;
+          const _milestoneBonus = _isDesktop ? Math.floor(state.score / 500) * 35 : 0;
           state.speed = Math.min(
             CONFIG.maxSpeed + _milestoneBonus,
             CONFIG.startSpeed + state.score * 1.2 * _desktopMul + _milestoneBonus,
@@ -1088,7 +1088,7 @@
             spawnObstacle();
             // Desktop obstacles spawn 10% more frequently than mobile.
             const _obstFreqMul = state.width >= 640 ? 0.9 : 1;
-            state.obstacleTimer = randomBetween(0.8, 1.4) * Math.max(0.78, 1 - state.score / 4200) * _obstFreqMul;
+            state.obstacleTimer = randomBetween(1.1, 1.9) * Math.max(0.78, 1 - state.score / 4200) * _obstFreqMul;
           }
 
           state.collectibleTimer -= delta;
