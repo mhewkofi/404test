@@ -1088,7 +1088,7 @@
             spawnObstacle();
             // Desktop obstacles spawn 10% more frequently than mobile.
             const _obstFreqMul = state.width >= 640 ? 0.9 : 1;
-            state.obstacleTimer = randomBetween(1.25, 2.15) * Math.max(0.78, 1 - state.score / 4200) * _obstFreqMul;
+            state.obstacleTimer = randomBetween(0.8, 1.4) * Math.max(0.78, 1 - state.score / 4200) * _obstFreqMul;
           }
 
           state.collectibleTimer -= delta;
