@@ -517,6 +517,7 @@
           playBtnHover: false,
           // Win state
           fireworkTimer: 0, // counts down between firework bursts when mode === "won"
+          bgDrift: 0,      // always-advancing offset drives cloud movement before play
         };
 
         const WIN_SCORE = 10000;
@@ -712,7 +713,7 @@
           state.health = CONFIG.maxHealth;
           state.speed = CONFIG.startSpeed;
           state.obstacleTimer = 0.3; // First obstacle arrives almost immediately after pressing Play.
-          state.collectibleTimer = 2.4;
+          state.collectibleTimer = 3.4;
           state.animTime = 0;
           state.invulnerable = 0;
           state.obstacles.forEach((item) => releaseObject(item, obstaclePool));
@@ -927,8 +928,9 @@
           const image = pickObstacleImage();
           // Height controls jump difficulty; width follows the image's natural
           // aspect ratio so PNGs of any shape never get squashed.
-          // (Range bumped +20% from the previous 40–57.)
-          const height = randomBetween(48, 68);
+          // (Range bumped +20% from the previous 40–57.) Mobile is 20% smaller.
+          const _sizeMul = state.width < 640 ? 0.8 : 1;
+          const height = randomBetween(48, 68) * _sizeMul;
           const aspect =
             image && image.complete && image.naturalWidth > 0
               ? image.naturalWidth / image.naturalHeight
@@ -1054,6 +1056,8 @@
           }
 
           if (state.mode !== "playing") {
+            // Slowly advance bgDrift so clouds drift gently before/after play.
+            state.bgDrift += delta * 400;
             updateParticles(delta);
             return;
           }
@@ -1094,7 +1098,7 @@
           state.collectibleTimer -= delta;
           if (state.collectibleTimer <= 0) {
             spawnCollectible();
-            state.collectibleTimer = randomBetween(3.4, 5.8);
+            state.collectibleTimer = randomBetween(4.9, 8.3) * (1 + state.score / 4000);
           }
 
           updateObstacles(delta);
@@ -1223,30 +1227,47 @@
         function drawBackground() {
           ctx.fillStyle = CONFIG.skyColor;
           ctx.fillRect(0, 0, state.width, state.height);
+          const isMobile = state.width < 640;
           // Furthest back: small sparse clouds (cloudA + cloudB PNGs), drifting slowly
           // and spaced far apart so the sky reads as quiet, not busy.
+          // Mobile: 20% smaller, spread further down the sky.
           drawParallaxProps(
             images.backgrounds.cloudA,
             0.004,
-            [
-              { x: 0.12, y: 0.09, size: 130 },
-              { x: 0.74, y: 0.14, size: 110 },
-            ],
+            isMobile
+              ? [
+                  { x: 0.12, y: 0.14, size: 104 },
+                  { x: 0.74, y: 0.42, size: 88 },
+                ]
+              : [
+                  { x: 0.12, y: 0.09, size: 130 },
+                  { x: 0.74, y: 0.14, size: 110 },
+                ],
             2600,
+            null,
+            bgCloudDist(),
           );
           drawParallaxProps(
             images.backgrounds.cloudB,
             0.004,
-            [
-              { x: 0.42, y: 0.20, size: 140 },
-              { x: 0.92, y: 0.07, size: 118 },
-            ],
+            isMobile
+              ? [
+                  { x: 0.42, y: 0.28, size: 112 },
+                  { x: 0.92, y: 0.12, size: 94 },
+                ]
+              : [
+                  { x: 0.42, y: 0.20, size: 140 },
+                  { x: 0.92, y: 0.07, size: 118 },
+                ],
             2800,
+            null,
+            bgCloudDist(),
           );
+          // Rock: mobile is 20% bigger and pushed lower so it doesn't crowd the top.
           drawParallaxProps(
             images.backgrounds.rock,
             0.002,
-            [{ x: 0.43, y: 0.15, size: Math.min(250, state.width * 0.24) }],
+            [{ x: 0.43, y: isMobile ? 0.35 : 0.15, size: Math.min(250, state.width * 0.24) * (isMobile ? 1.2 : 1) }],
             2200,
           );
           drawParallaxProps(
@@ -1261,25 +1282,42 @@
             ],
             1200,
           );
+          // cloud1 + cloud2: drift before play via bgCloudDist(); mobile spreads them down.
           drawParallaxProps(
             images.backgrounds.cloud1,
             0.012,
-            [
-              { x: 0.08, y: 0.28, size: 118 },
-              { x: 0.42, y: 0.16, size: 96 },
-              { x: 0.78, y: 0.35, size: 126 },
-            ],
+            isMobile
+              ? [
+                  { x: 0.08, y: 0.28, size: 118 },
+                  { x: 0.42, y: 0.24, size: 96 },
+                  { x: 0.78, y: 0.46, size: 126 },
+                ]
+              : [
+                  { x: 0.08, y: 0.28, size: 118 },
+                  { x: 0.42, y: 0.16, size: 96 },
+                  { x: 0.78, y: 0.35, size: 126 },
+                ],
             1380,
+            null,
+            bgCloudDist(),
           );
           drawParallaxProps(
             images.backgrounds.cloud2,
             0.016,
-            [
-              { x: 0.18, y: 0.39, size: 108 },
-              { x: 0.58, y: 0.31, size: 84 },
-              { x: 0.88, y: 0.18, size: 102 },
-            ],
+            isMobile
+              ? [
+                  { x: 0.18, y: 0.44, size: 108 },
+                  { x: 0.58, y: 0.35, size: 84 },
+                  { x: 0.88, y: 0.28, size: 102 },
+                ]
+              : [
+                  { x: 0.18, y: 0.39, size: 108 },
+                  { x: 0.58, y: 0.31, size: 84 },
+                  { x: 0.88, y: 0.18, size: 102 },
+                ],
             1290,
+            null,
+            bgCloudDist(),
           );
           drawMixedParallaxProps(
             [
@@ -1403,10 +1441,11 @@
           }
         }
 
-        function drawParallaxProps(image, speedFactor, placements, spacing, baseY = null) {
+        function drawParallaxProps(image, speedFactor, placements, spacing, baseY = null, distanceOverride = null) {
           if (!image.complete || image.naturalWidth === 0) return;
+          const dist = distanceOverride !== null ? distanceOverride : state.distance;
           const travel = Math.max(spacing, state.width * 0.72);
-          const offset = -((state.distance * speedFactor) % travel);
+          const offset = -((dist * speedFactor) % travel);
           placements.forEach((placement) => {
             const drawWidth = placement.size;
             const drawHeight = (image.naturalHeight / image.naturalWidth) * drawWidth;
@@ -1596,6 +1635,12 @@
 
         function randomItem(items) {
           return items[Math.floor(Math.random() * items.length)];
+        }
+
+        // Returns the distance value to use for cloud parallax. Before play,
+        // uses bgDrift so clouds drift slowly without touching state.distance.
+        function bgCloudDist() {
+          return state.mode === "playing" ? state.distance : state.bgDrift;
         }
 
         // requestAnimationFrame loop with delta time keeps speed stable across displays.
