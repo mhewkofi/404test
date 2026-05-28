@@ -1267,7 +1267,7 @@
           drawParallaxProps(
             images.backgrounds.rock,
             0.002,
-            [{ x: 0.43, y: isMobile ? 0.35 : 0.15, size: Math.min(250, state.width * 0.24) * (isMobile ? 1.2 : 1) }],
+            [{ x: 0.5 - (Math.min(250, state.width * 0.24) * (isMobile ? 1.2 : 1)) / (2 * state.width), y: isMobile ? 0.35 : 0.15, size: Math.min(250, state.width * 0.24) * (isMobile ? 1.2 : 1) }],
             2200,
           );
           drawParallaxProps(
